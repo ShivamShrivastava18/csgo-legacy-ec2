@@ -2,11 +2,19 @@ import base64
 import json
 import os
 
+import boto3
+
+import a2s
 import discord_api
+import server_control
 
 
 def _env(name, default=""):
     return os.environ.get(name, default)
+
+
+def _client(service):
+    return boto3.client(service)
 
 
 def _json_response(payload, status=200):
@@ -71,23 +79,78 @@ def handle_command(body):
 
 
 def cmd_start(opts, body):
-    return msg("not implemented")
+    ec2 = _client("ec2")
+    iid = _env("INSTANCE_ID")
+    st = server_control.get_status(ec2, iid)
+    if st["state"] == "running" and st["ip"]:
+        return msg(f"Already running. {connect_line(st['ip'])}")
+    if st["state"] == "stopping":
+        return msg("Instance is still stopping, try again in a minute.")
+    if st["state"] not in ("stopped", "running"):
+        return msg(f"Instance is {st['state']}, try again shortly.")
+    map_name = opts.get("map", "de_mirage")
+    server_control.start_with_tags(ec2, iid, map_name, opts.get("mode", "competitive"), opts.get("tickrate", "64"))
+    _async_invoke({"source": "async-task", "task": "finish_start", "token": body["token"], "map": map_name})
+    return _json_response({"type": 5})
+
+
+def _async_invoke(payload):
+    _client("lambda").invoke(
+        FunctionName=_env("AWS_LAMBDA_FUNCTION_NAME"),
+        InvocationType="Event",
+        Payload=json.dumps(payload).encode(),
+    )
+
+
+def _do_stop():
+    ec2 = _client("ec2")
+    st = server_control.get_status(ec2, _env("INSTANCE_ID"))
+    if st["state"] in ("stopped", "stopping"):
+        return msg(f"Already {st['state']}.")
+    server_control.stop_instance(ec2, _env("INSTANCE_ID"))
+    hours = server_control.runtime_hours(st["launch_time"])
+    return msg(f"Stopping. It ran {hours}h this session.")
 
 
 def cmd_stop():
-    return msg("not implemented")
+    return _do_stop()
 
 
 def cmd_status():
-    return msg("not implemented")
+    ec2 = _client("ec2")
+    st = server_control.get_status(ec2, _env("INSTANCE_ID"))
+    if st["state"] != "running" or not st["ip"]:
+        return msg(f"Server is {st['state']}.")
+    info = a2s.query(st["ip"])
+    if not info:
+        return msg(f"Instance running, srcds not answering yet. {connect_line(st['ip'])}")
+    return msg(
+        f"Running **{info['map']}** with {info['players']}/{info['max_players']} players. {connect_line(st['ip'])}"
+    )
 
 
 def cmd_map(opts, body):
-    return msg("not implemented")
+    ec2 = _client("ec2")
+    st = server_control.get_status(ec2, _env("INSTANCE_ID"))
+    if st["state"] != "running":
+        return msg("Server is not running. Use /csgo start.")
+    command_id = server_control.change_map(_client("ssm"), _env("INSTANCE_ID"), opts["map"])
+    _async_invoke(
+        {
+            "source": "async-task",
+            "task": "finish_map",
+            "token": body["token"],
+            "map": opts["map"],
+            "command_id": command_id,
+        }
+    )
+    return _json_response({"type": 5})
 
 
 def handle_button(body):
-    return msg("not implemented")
+    if body["data"].get("custom_id") == "csgo_stop":
+        return _do_stop()
+    return msg("Unknown button.")
 
 
 def hourly_check():
