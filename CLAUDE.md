@@ -28,10 +28,20 @@ The full setup was validated manually, step by step, on a live c5.large in ap-so
 - x86_64 only, Graviton will not work. 40 GB disk minimum (server files are 33 GB, measured; a 40 GB volume ends 94% full, 50 GB is comfortable). SteamCMD reports the download as ~35 GB.
 - Security group: UDP 27015 required, TCP 27015 for RCON, UDP 27020 SourceTV.
 
+## Shipped
+
+- Repo and article published (install.sh fresh-instance test passed 2026-08-27). gslt.txt and article.md excluded, see .gitignore.
+- Discord bot in `bot/`: serverless slash commands /csgo start|stop|status|map via Lambda `csgo-discord-bot` Function URL as Discord Interactions Endpoint, hourly still-running reminder with Stop button via EventBridge rule `csgo-hourly-reminder`, boot-time config via EC2 tags + IMDS (`bot/server/csgo-boot.sh` on the instance, @reboot crontab), live map change via SSM. Live end-to-end validated 2026-08-29 (start/stop/status/map all worked from Discord). Design and plan under docs/superpowers/. Setup and redeploy: `bot/README.md`. Instance has role `csgo-server-ssm`; account secrets live only in Lambda env and `bot/.env` (gitignored).
+
+## Live-deploy gotchas (verified 2026-08-29, already fixed in code)
+
+- Discord's Cloudflare rejects Python's default urllib User-Agent with error 1010; `discord_api._request` sends a `DiscordBot (...)` User-Agent.
+- A public Lambda Function URL (auth NONE) needs BOTH `lambda:InvokeFunctionUrl` and `lambda:InvokeFunction` granted to principal `*`, or Discord endpoint verification gets 403 AccessDeniedException. deploy.sh adds both and self-heals on rerun.
+- Slow AWS work must stay off the sync interaction path: cmd_start/cmd_map return the type-5 ack after one describe + one self-invoke; StartInstances and SSM SendCommand run in the async finishers, or the 3-second Discord deadline is missed from ap-south-1.
+
 ## Pending work
 
-1. Publish repo and article (install.sh fresh-instance test passed 2026-08-27). Exclude gslt.txt and article.md, see .gitignore.
-2. Discord bot (branch `discord-bot`): serverless slash commands /csgo start|stop|status|map via Lambda Function URL as Discord Interactions Endpoint, hourly still-running reminder with Stop button via EventBridge, boot-time config via EC2 tags + IMDS, live map change via SSM. Design: docs/superpowers/specs/2026-08-27-discord-bot-design.md. Plan: docs/superpowers/plans/2026-08-27-discord-bot.md.
+- None open. Possible later addition: scheduled auto-stop Lambda when the server is empty (spec explicitly deferred it).
 
 ## Style
 
