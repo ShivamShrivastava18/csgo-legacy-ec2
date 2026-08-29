@@ -2,3 +2,5 @@ gslt.txt
 *.pem
 install.log
 article.md
+__pycache__/
+*.pyc
