@@ -31,7 +31,7 @@ The full setup was validated manually, step by step, on a live c5.large in ap-so
 ## Pending work
 
 1. Publish repo and article (install.sh fresh-instance test passed 2026-08-27). Exclude gslt.txt and article.md, see .gitignore.
-2. Next feature: Lambda + Function URL with start/stop/status actions for the EC2 instance (boto3, IAM scoped to the one instance, shared-secret auth), plus a small friend-facing app (likely a static page) showing server state and current public IP, since the instance IP changes on every stop/start (no Elastic IP by design). Requires `@reboot /home/csgoserver/csgoserver start` in the csgoserver crontab so srcds starts with the instance. Possible later addition: scheduled auto-stop Lambda when the server is empty.
+2. Discord bot (branch `discord-bot`): serverless slash commands /csgo start|stop|status|map via Lambda Function URL as Discord Interactions Endpoint, hourly still-running reminder with Stop button via EventBridge, boot-time config via EC2 tags + IMDS, live map change via SSM. Design: docs/superpowers/specs/2026-08-27-discord-bot-design.md. Plan: docs/superpowers/plans/2026-08-27-discord-bot.md.
 
 ## Style
 
