@@ -1,5 +1,6 @@
 import datetime
 import boto3
+import pytest
 from botocore.stub import Stubber, ANY
 import server_control
 
@@ -110,3 +111,9 @@ def test_command_result():
         status, out = server_control.command_result(ssm, IID, "cmd-12345678-1234-1234-1234-123456789012")
     assert status == "Success"
     assert out == "sent"
+
+
+def test_change_map_rejects_shell_metacharacters():
+    ssm, stub = stubbed_ssm()
+    with stub, pytest.raises(ValueError):
+        server_control.change_map(ssm, IID, 'de_dust2"; rm -rf /')

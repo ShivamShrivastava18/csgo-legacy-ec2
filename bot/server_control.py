@@ -1,4 +1,5 @@
 import datetime
+import re
 
 MODE_SETTINGS = {
     "casual": ("0", "0"),
@@ -50,6 +51,8 @@ fi
 
 
 def change_map(ssm, instance_id, map_name):
+    if not re.fullmatch(r"[a-z0-9_]+", map_name):
+        raise ValueError(f"invalid map name: {map_name!r}")
     resp = ssm.send_command(
         InstanceIds=[instance_id],
         DocumentName="AWS-RunShellScript",
