@@ -45,7 +45,7 @@ ensure_role() {
     }"
 }
 
-ENV_VARS="Variables={DISCORD_PUBLIC_KEY=$DISCORD_PUBLIC_KEY,DISCORD_BOT_TOKEN=$DISCORD_BOT_TOKEN,DISCORD_APP_ID=$DISCORD_APP_ID,DISCORD_CHANNEL_ID=$DISCORD_CHANNEL_ID,INSTANCE_ID=$INSTANCE_ID,SV_PASSWORD=$SV_PASSWORD}"
+ENV_VARS=$(python3 -c 'import json, os; keys = ["DISCORD_PUBLIC_KEY", "DISCORD_BOT_TOKEN", "DISCORD_APP_ID", "DISCORD_CHANNEL_ID", "INSTANCE_ID", "SV_PASSWORD"]; print(json.dumps({"Variables": {k: os.environ.get(k, "") for k in keys}}))')
 
 deploy_lambda() {
   if "${AWS[@]}" lambda get-function --function-name "$FUNC" >/dev/null 2>&1; then
