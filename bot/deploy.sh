@@ -65,14 +65,16 @@ deploy_lambda() {
 }
 
 ensure_url() {
-  if ! "${AWS[@]}" lambda get-function-url-config --function-name "$FUNC" >/dev/null 2>&1; then
+  "${AWS[@]}" lambda get-function-url-config --function-name "$FUNC" >/dev/null 2>&1 || \
     "${AWS[@]}" lambda create-function-url-config --function-name "$FUNC" \
       --auth-type NONE >/dev/null
-    "${AWS[@]}" lambda add-permission --function-name "$FUNC" \
-      --statement-id FunctionURLAllowPublicAccess \
-      --action lambda:InvokeFunctionUrl --principal "*" \
-      --function-url-auth-type NONE >/dev/null
-  fi
+  "${AWS[@]}" lambda add-permission --function-name "$FUNC" \
+    --statement-id FunctionURLAllowPublicAccess \
+    --action lambda:InvokeFunctionUrl --principal "*" \
+    --function-url-auth-type NONE >/dev/null 2>&1 || true
+  "${AWS[@]}" lambda add-permission --function-name "$FUNC" \
+    --statement-id FunctionURLPublicInvokeFunction \
+    --action lambda:InvokeFunction --principal "*" >/dev/null 2>&1 || true
 }
 
 ensure_schedule() {
