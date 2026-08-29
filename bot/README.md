@@ -76,16 +76,16 @@ The bot changes maps over SSM and reads the boot-time map/mode/tickrate from EC2
 
 This creates an instance profile with the `AmazonSSMManagedInstanceCore` policy, attaches it to the instance, and enables instance metadata tags.
 
-Start the instance once so the SSM agent registers with Systems Manager:
+Start the instance once so the SSM agent registers with Systems Manager. Use the same `<AWS_PROFILE>` and `<AWS_REGION>` values you set in `.env`:
 
 ```bash
-aws ec2 start-instances --instance-ids <INSTANCE_ID> --profile personal --region ap-south-1
+aws ec2 start-instances --instance-ids <INSTANCE_ID> --profile <AWS_PROFILE> --region <AWS_REGION>
 ```
 
 Wait a minute or two, then confirm the agent is online:
 
 ```bash
-aws ssm describe-instance-information --profile personal --region ap-south-1
+aws ssm describe-instance-information --profile <AWS_PROFILE> --region <AWS_REGION>
 ```
 
 Once the instance shows up in that output, install the boot script that reads the `csgo:map`, `csgo:mode`, and `csgo:tickrate` tags on startup and writes them into the LinuxGSM config before launching srcds:
@@ -106,6 +106,6 @@ The bot itself costs effectively nothing. Lambda's free tier covers this workloa
 
 **Slash commands don't show up in Discord.** Either `DISCORD_GUILD_ID` in `.env` is wrong (commands were registered to the wrong server) or `register_commands.py` hasn't been run since the bot was added. Re-check the guild ID and re-run `python3 register_commands.py`. It can also take a minute for Discord's client to refresh the command list, try restarting Discord.
 
-**`/csgo map` fails or times out.** The SSM agent on the instance isn't registered. Run `aws ssm describe-instance-information --profile personal --region ap-south-1` and confirm the instance appears; if it doesn't, the instance profile from `./deploy.sh --onboard-instance` may not be attached, or the instance needs a reboot to pick it up.
+**`/csgo map` fails or times out.** The SSM agent on the instance isn't registered. Run `aws ssm describe-instance-information --profile <AWS_PROFILE> --region <AWS_REGION>` and confirm the instance appears; if it doesn't, the instance profile from `./deploy.sh --onboard-instance` may not be attached, or the instance needs a reboot to pick it up.
 
 **The hourly reminder never posts.** `DISCORD_CHANNEL_ID` in `.env` is wrong, or the bot doesn't have Send Messages permission in that specific channel (channel-level permission overrides can block a bot even if the server-wide invite granted it). Check the channel's permissions for the bot's role.
