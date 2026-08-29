@@ -15,8 +15,11 @@ def verify_signature(public_key_hex, signature_hex, timestamp, body):
         return False
 
 
+USER_AGENT = "DiscordBot (https://github.com/ShivamShrivastava18/csgo-legacy-ec2, 1.0)"
+
+
 def _request(method, url, token=None, payload=None):
-    headers = {"Content-Type": "application/json"}
+    headers = {"Content-Type": "application/json", "User-Agent": USER_AGENT}
     if token:
         headers["Authorization"] = f"Bot {token}"
     data = json.dumps(payload).encode() if payload is not None else None
