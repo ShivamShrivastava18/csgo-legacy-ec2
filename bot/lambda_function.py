@@ -4,6 +4,7 @@ import os
 import time
 
 import boto3
+from botocore.exceptions import ClientError
 
 import a2s
 import discord_api
@@ -122,7 +123,7 @@ def cmd_status():
     st = server_control.get_status(ec2, _env("INSTANCE_ID"))
     if st["state"] != "running" or not st["ip"]:
         return msg(f"Server is {st['state']}.")
-    info = a2s.query(st["ip"])
+    info = a2s.query(st["ip"], timeout=1.0)
     if not info:
         return msg(f"Instance running, srcds not answering yet. {connect_line(st['ip'])}")
     return msg(
@@ -135,7 +136,10 @@ def cmd_map(opts, body):
     st = server_control.get_status(ec2, _env("INSTANCE_ID"))
     if st["state"] != "running":
         return msg("Server is not running. Use /csgo start.")
-    command_id = server_control.change_map(_client("ssm"), _env("INSTANCE_ID"), opts["map"])
+    try:
+        command_id = server_control.change_map(_client("ssm"), _env("INSTANCE_ID"), opts["map"])
+    except ClientError:
+        return msg("Could not reach the server via SSM. Check onboarding: ./deploy.sh --onboard-instance")
     _async_invoke(
         {
             "source": "async-task",

@@ -41,7 +41,12 @@ def wire(monkeypatch, state, ip=None, a2s_info=None):
         lambda_function.server_control, "change_map",
         lambda ssm, iid, m: calls["change_map"].append(m) or "cmd-1",
     )
-    monkeypatch.setattr(lambda_function.a2s, "query", lambda ip_, **kw: a2s_info)
+    a2s_calls = []
+    monkeypatch.setattr(
+        lambda_function.a2s, "query",
+        lambda ip_, **kw: a2s_calls.append(kw) or a2s_info,
+    )
+    calls["a2s"] = a2s_calls
     return fake_lambda, calls
 
 
@@ -94,8 +99,10 @@ def test_status_running_with_players(monkeypatch):
 
 
 def test_status_running_but_srcds_down(monkeypatch):
-    wire(monkeypatch, "running", ip="1.2.3.4", a2s_info=None)
-    assert "not answering" in content_of(lambda_function.cmd_status())
+    _, calls = wire(monkeypatch, "running", ip="1.2.3.4", a2s_info=None)
+    resp = lambda_function.cmd_status()
+    assert "not answering" in content_of(resp)
+    assert calls["a2s"] == [{"timeout": 1.0}]
 
 
 def test_status_stopped(monkeypatch):
@@ -118,6 +125,19 @@ def test_map_change_when_stopped_redirects(monkeypatch):
     resp = lambda_function.cmd_map({"map": "de_inferno"}, {"token": "tok2"})
     assert calls["change_map"] == []
     assert "/csgo start" in content_of(resp)
+
+
+def test_map_change_reports_ssm_offline(monkeypatch):
+    from botocore.exceptions import ClientError
+    _, calls = wire(monkeypatch, "running", ip="1.2.3.4")
+
+    def raise_client_error(ssm, iid, m):
+        raise ClientError({"Error": {"Code": "InvalidInstanceId"}}, "SendCommand")
+
+    monkeypatch.setattr(lambda_function.server_control, "change_map", raise_client_error)
+    resp = lambda_function.cmd_map({"map": "de_inferno"}, {"token": "tok2"})
+    assert "SSM" in content_of(resp)
+    assert "onboard" in content_of(resp)
 
 
 def test_button_stop(monkeypatch):
