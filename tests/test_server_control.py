@@ -70,3 +70,43 @@ def test_runtime_hours():
 def test_mode_settings_table():
     assert server_control.MODE_SETTINGS["competitive"] == ("0", "1")
     assert server_control.MODE_SETTINGS["deathmatch"] == ("1", "2")
+
+
+def stubbed_ssm():
+    ssm = boto3.client("ssm", region_name="ap-south-1")
+    return ssm, Stubber(ssm)
+
+
+def test_change_map_sends_shell_command():
+    ssm, stub = stubbed_ssm()
+    stub.add_response(
+        "send_command",
+        {"Command": {"CommandId": "cmd-12345678-1234-1234-1234-123456789012"}},
+        {
+            "InstanceIds": [IID],
+            "DocumentName": "AWS-RunShellScript",
+            "Parameters": {"commands": [ANY]},
+        },
+    )
+    with stub:
+        cmd_id = server_control.change_map(ssm, IID, "de_inferno")
+    assert cmd_id == "cmd-12345678-1234-1234-1234-123456789012"
+
+
+def test_change_map_script_contains_map_and_fallback():
+    script = server_control.CHANGE_MAP_SCRIPT.format(map="de_nuke")
+    assert 'send "changelevel de_nuke"' in script
+    assert "tmux" in script
+
+
+def test_command_result():
+    ssm, stub = stubbed_ssm()
+    stub.add_response(
+        "get_command_invocation",
+        {"Status": "Success", "StandardOutputContent": "sent"},
+        {"CommandId": "cmd-12345678-1234-1234-1234-123456789012", "InstanceId": IID},
+    )
+    with stub:
+        status, out = server_control.command_result(ssm, IID, "cmd-12345678-1234-1234-1234-123456789012")
+    assert status == "Success"
+    assert out == "sent"

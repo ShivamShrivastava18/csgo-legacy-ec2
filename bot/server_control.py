@@ -36,3 +36,28 @@ def stop_instance(ec2, instance_id):
 def runtime_hours(launch_time, now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return round((now - launch_time).total_seconds() / 3600, 1)
+
+
+CHANGE_MAP_SCRIPT = """set -e
+if sudo -u csgoserver -H /home/csgoserver/csgoserver send "changelevel {map}" 2>/dev/null; then
+  echo sent
+else
+  SOCK=$(ls /tmp/tmux-$(id -u csgoserver)/ | head -1)
+  sudo -u csgoserver -H tmux -L "$SOCK" send-keys -t csgoserver "changelevel {map}" Enter
+  echo sent-tmux
+fi
+"""
+
+
+def change_map(ssm, instance_id, map_name):
+    resp = ssm.send_command(
+        InstanceIds=[instance_id],
+        DocumentName="AWS-RunShellScript",
+        Parameters={"commands": [CHANGE_MAP_SCRIPT.format(map=map_name)]},
+    )
+    return resp["Command"]["CommandId"]
+
+
+def command_result(ssm, instance_id, command_id):
+    resp = ssm.get_command_invocation(CommandId=command_id, InstanceId=instance_id)
+    return resp["Status"], resp.get("StandardOutputContent", "")
