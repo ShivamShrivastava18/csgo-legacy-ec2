@@ -4,3 +4,5 @@ install.log
 article.md
 __pycache__/
 *.pyc
+bot/.env
+bot/build/
