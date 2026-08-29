@@ -58,9 +58,16 @@ def test_start_when_stopped_defers_and_invokes_async(monkeypatch):
     fake_lambda, calls = wire(monkeypatch, "stopped")
     resp = lambda_function.cmd_start({"map": "de_dust2"}, {"token": "tok1"})
     assert json.loads(resp["body"])["type"] == 5
-    assert calls["start"] == [("de_dust2", "competitive", "64")]
+    assert calls["start"] == []
     payload = json.loads(fake_lambda.invocations[0]["Payload"])
-    assert payload == {"source": "async-task", "task": "finish_start", "token": "tok1", "map": "de_dust2"}
+    assert payload == {
+        "source": "async-task",
+        "task": "finish_start",
+        "token": "tok1",
+        "map": "de_dust2",
+        "mode": "competitive",
+        "tickrate": "64",
+    }
     assert fake_lambda.invocations[0]["InvocationType"] == "Event"
 
 
@@ -114,10 +121,10 @@ def test_map_change_on_running_server_defers(monkeypatch):
     fake_lambda, calls = wire(monkeypatch, "running", ip="1.2.3.4")
     resp = lambda_function.cmd_map({"map": "de_inferno"}, {"token": "tok2"})
     assert json.loads(resp["body"])["type"] == 5
-    assert calls["change_map"] == ["de_inferno"]
+    assert calls["change_map"] == []
     payload = json.loads(fake_lambda.invocations[0]["Payload"])
     assert payload["task"] == "finish_map"
-    assert payload["command_id"] == "cmd-1"
+    assert payload["map"] == "de_inferno"
 
 
 def test_map_change_when_stopped_redirects(monkeypatch):
@@ -125,19 +132,6 @@ def test_map_change_when_stopped_redirects(monkeypatch):
     resp = lambda_function.cmd_map({"map": "de_inferno"}, {"token": "tok2"})
     assert calls["change_map"] == []
     assert "/csgo start" in content_of(resp)
-
-
-def test_map_change_reports_ssm_offline(monkeypatch):
-    from botocore.exceptions import ClientError
-    _, calls = wire(monkeypatch, "running", ip="1.2.3.4")
-
-    def raise_client_error(ssm, iid, m):
-        raise ClientError({"Error": {"Code": "InvalidInstanceId"}}, "SendCommand")
-
-    monkeypatch.setattr(lambda_function.server_control, "change_map", raise_client_error)
-    resp = lambda_function.cmd_map({"map": "de_inferno"}, {"token": "tok2"})
-    assert "SSM" in content_of(resp)
-    assert "onboard" in content_of(resp)
 
 
 def test_button_stop(monkeypatch):

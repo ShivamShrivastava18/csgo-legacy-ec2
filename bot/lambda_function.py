@@ -90,9 +90,14 @@ def cmd_start(opts, body):
         return msg("Instance is still stopping, try again in a minute.")
     if st["state"] not in ("stopped", "running"):
         return msg(f"Instance is {st['state']}, try again shortly.")
-    map_name = opts.get("map", "de_mirage")
-    server_control.start_with_tags(ec2, iid, map_name, opts.get("mode", "competitive"), opts.get("tickrate", "64"))
-    _async_invoke({"source": "async-task", "task": "finish_start", "token": body["token"], "map": map_name})
+    _async_invoke({
+        "source": "async-task",
+        "task": "finish_start",
+        "token": body["token"],
+        "map": opts.get("map", "de_mirage"),
+        "mode": opts.get("mode", "competitive"),
+        "tickrate": opts.get("tickrate", "64"),
+    })
     return _json_response({"type": 5})
 
 
@@ -136,19 +141,7 @@ def cmd_map(opts, body):
     st = server_control.get_status(ec2, _env("INSTANCE_ID"))
     if st["state"] != "running":
         return msg("Server is not running. Use /csgo start.")
-    try:
-        command_id = server_control.change_map(_client("ssm"), _env("INSTANCE_ID"), opts["map"])
-    except ClientError:
-        return msg("Could not reach the server via SSM. Check onboarding: ./deploy.sh --onboard-instance")
-    _async_invoke(
-        {
-            "source": "async-task",
-            "task": "finish_map",
-            "token": body["token"],
-            "map": opts["map"],
-            "command_id": command_id,
-        }
-    )
+    _async_invoke({"source": "async-task", "task": "finish_map", "token": body["token"], "map": opts["map"]})
     return _json_response({"type": 5})
 
 
@@ -176,6 +169,7 @@ def run_async_task(event):
 
 def finish_start(event):
     ec2 = _client("ec2")
+    server_control.start_with_tags(ec2, _env("INSTANCE_ID"), event["map"], event["mode"], event["tickrate"])
     deadline = _now() + 300
     ip = None
     while _now() < deadline:
@@ -200,8 +194,17 @@ def finish_start(event):
 
 def finish_map(event):
     ssm = _client("ssm")
+    try:
+        command_id = server_control.change_map(ssm, _env("INSTANCE_ID"), event["map"])
+    except ClientError:
+        discord_api.patch_original(
+            _env("DISCORD_APP_ID"),
+            event["token"],
+            "Could not reach the server via SSM. Check onboarding: ./deploy.sh --onboard-instance",
+        )
+        return {"ok": False}
     for _ in range(30):
-        status, output = server_control.command_result(ssm, _env("INSTANCE_ID"), event["command_id"])
+        status, output = server_control.command_result(ssm, _env("INSTANCE_ID"), command_id)
         if status == "Success":
             discord_api.patch_original(
                 _env("DISCORD_APP_ID"), event["token"], f"Map changed to **{event['map']}**."
