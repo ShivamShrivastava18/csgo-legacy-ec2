@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import time
 
 import boto3
 
@@ -153,9 +154,80 @@ def handle_button(body):
     return msg("Unknown button.")
 
 
-def hourly_check():
-    return {"ok": True}
+def _sleep(seconds):
+    time.sleep(seconds)
+
+
+def _now():
+    return time.time()
 
 
 def run_async_task(event):
+    if event["task"] == "finish_start":
+        return finish_start(event)
+    if event["task"] == "finish_map":
+        return finish_map(event)
+    return {"ok": False}
+
+
+def finish_start(event):
+    ec2 = _client("ec2")
+    deadline = _now() + 300
+    ip = None
+    while _now() < deadline:
+        st = server_control.get_status(ec2, _env("INSTANCE_ID"))
+        ip = st["ip"]
+        if st["state"] == "running" and ip:
+            if a2s.query(ip):
+                discord_api.patch_original(
+                    _env("DISCORD_APP_ID"),
+                    event["token"],
+                    f"Server up on **{event['map']}**. {connect_line(ip)}",
+                )
+                return {"ok": True}
+        _sleep(10)
+    if ip:
+        content = f"Instance is up but srcds is not answering yet. Try /csgo status in a minute. {connect_line(ip)}"
+    else:
+        content = "Timed out waiting for the instance to start. Check the AWS console."
+    discord_api.patch_original(_env("DISCORD_APP_ID"), event["token"], content)
+    return {"ok": False}
+
+
+def finish_map(event):
+    ssm = _client("ssm")
+    for _ in range(30):
+        status, output = server_control.command_result(ssm, _env("INSTANCE_ID"), event["command_id"])
+        if status == "Success":
+            discord_api.patch_original(
+                _env("DISCORD_APP_ID"), event["token"], f"Map changed to **{event['map']}**."
+            )
+            return {"ok": True}
+        if status in ("Failed", "Cancelled", "TimedOut"):
+            discord_api.patch_original(
+                _env("DISCORD_APP_ID"), event["token"], f"Map change failed: {status}. {output}"[:1900]
+            )
+            return {"ok": False}
+        _sleep(2)
+    discord_api.patch_original(_env("DISCORD_APP_ID"), event["token"], "Map change timed out.")
+    return {"ok": False}
+
+
+def hourly_check():
+    ec2 = _client("ec2")
+    st = server_control.get_status(ec2, _env("INSTANCE_ID"))
+    if st["state"] != "running" or not st["ip"]:
+        return {"ok": True, "skipped": True}
+    hours = server_control.runtime_hours(st["launch_time"])
+    info = a2s.query(st["ip"])
+    if info:
+        content = (
+            f"Server still running for {hours}h · **{info['map']}** · "
+            f"{info['players']} players · {connect_line(st['ip'])}"
+        )
+    else:
+        content = f"Instance still running for {hours}h (srcds not answering) · {connect_line(st['ip'])}"
+    discord_api.post_channel_message(
+        _env("DISCORD_BOT_TOKEN"), _env("DISCORD_CHANNEL_ID"), content, discord_api.stop_button_components()
+    )
     return {"ok": True}
