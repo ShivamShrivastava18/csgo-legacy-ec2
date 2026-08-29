@@ -45,3 +45,16 @@ def test_defaults_when_tags_missing(tmp_path):
 
 def test_script_passes_bash_syntax_check():
     subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
+
+
+def test_missing_config_aborts_without_creating_file(tmp_path):
+    cfg = tmp_path / "does-not-exist.cfg"
+    env = {
+        "CSGO_CFG": str(cfg),
+        "CSGO_SKIP_START": "1",
+        "PATH": "/usr/bin:/bin",
+    }
+    result = subprocess.run(["bash", str(SCRIPT)], env=env, capture_output=True)
+    assert result.returncode != 0
+    assert not cfg.exists()
+    assert not (tmp_path / "does-not-exist.cfg.tmp").exists()

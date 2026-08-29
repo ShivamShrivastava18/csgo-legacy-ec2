@@ -2,6 +2,7 @@
 set -u
 
 CFG="${CSGO_CFG:-/home/csgoserver/lgsm/config-lgsm/csgoserver/csgoserver.cfg}"
+[[ -f "$CFG" ]] || exit 1
 
 imds_tag() {
   local token
